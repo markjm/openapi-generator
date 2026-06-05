@@ -454,6 +454,8 @@ conf = openapi_client.Configuration(
         :param value: The debug status, True or False.
         :type: bool
         """
+        if hasattr(self, '_Configuration__debug') and self.__debug == value:
+            return
         self.__debug = value
         if self.__debug:
             # if debug status is True, turn on debug logging
