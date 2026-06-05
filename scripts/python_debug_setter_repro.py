@@ -110,7 +110,7 @@ def main():
     print(f"Simulating {NUM_LOGGERS:,} registered loggers, {NUM_COPIES:,} deepcopy calls\n")
 
     before_calls, before_time = count_clear_cache_calls(ConfigurationBefore, NUM_LOGGERS, NUM_COPIES)
-    after_calls,  after_time  = count_clear_cache_calls(ConfigurationAfter,  0,           NUM_COPIES)
+    after_calls,  after_time  = count_clear_cache_calls(ConfigurationAfter,  NUM_LOGGERS, NUM_COPIES)
 
     print(f"BEFORE fix: {before_calls:>10,} _clear_cache calls  ({before_time:.3f}s)")
     print(f"AFTER  fix: {after_calls:>10,} _clear_cache calls  ({after_time:.3f}s)")
