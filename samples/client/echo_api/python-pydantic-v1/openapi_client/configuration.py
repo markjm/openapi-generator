@@ -212,11 +212,7 @@ conf = openapi_client.Configuration(
         # use setter to (re-)attach file handler, since logger_file_handler is
         # excluded from the copy loop above and must be re-created
         result.logger_file = self.logger_file
-        # NOTE: result.__debug is already set correctly by the dict copy loop
-        # above (it is stored in __dict__ under its mangled name).  Calling the
-        # debug setter here is intentionally omitted to avoid redundant setLevel()
-        # calls, which each trigger logging.Manager._clear_cache() over every
-        # registered logger in the process.
+        # __debug is already copied above; avoid re-running debug setter.
         return result
 
     def __setattr__(self, name, value):

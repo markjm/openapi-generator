@@ -1,36 +1,9 @@
 #!/usr/bin/env python3
-"""
-Reproduction script for the pathological logger cache-clear performance issue
-in openapi-generator Python clients.
-
-Root cause:
-  Configuration.__deepcopy__ calls `result.debug = self.debug`, which always
-  invokes the debug setter.  The setter calls logger.setLevel(), which in turn
-  calls logging.Manager._clear_cache().  _clear_cache() iterates *every*
-  registered logger in the process to clear its cache dict.  In environments
-  with thousands of loggers (e.g. large ML frameworks) and thousands of
-  deepcopy calls this produces tens of millions of logger-cache iterations.
-
-Fix (two complementary layers):
-  1. __deepcopy__: remove the redundant `result.debug = self.debug` call.
-     _Configuration__debug is already present in __dict__ and is correctly
-     deep-copied in the attribute loop above it; the setter call is purely
-     redundant.
-  2. debug setter: guard with an early return when the new value equals the
-     current value, as defense-in-depth for any other caller that sets debug
-     to the same value it already holds.
-
-Usage:
-  python scripts/python_debug_setter_repro.py
-"""
+"""Reproduce debug-setter overhead during Configuration deepcopy."""
 
 import copy
 import logging
 import time
-
-# ---------------------------------------------------------------------------
-# Minimal stand-in for openapi-generator's Configuration class
-# ---------------------------------------------------------------------------
 
 class ConfigurationBefore:
     """Reproduces the ORIGINAL (unfixed) behaviour."""
@@ -83,8 +56,7 @@ class ConfigurationAfter:
             if k not in ("logger",):
                 setattr(result, k, copy.deepcopy(v, memo))
         result.logger = copy.copy(self.logger)
-        # FIX 1: __debug is already correctly copied above; do NOT call the
-        # debug setter here — that would redundantly call setLevel() / _clear_cache().
+        # __debug is already copied above; avoid re-running debug setter.
         return result
 
     @property
@@ -93,10 +65,6 @@ class ConfigurationAfter:
 
     @debug.setter
     def debug(self, value):
-        # FIX 2: defense-in-depth — no-op when the value hasn't changed.
-        # Uses try/except rather than hasattr(self, '_Configuration__debug')
-        # because name mangling only applies inside a class body, not in a
-        # string literal passed to hasattr.
         try:
             if self.__debug == value:
                 return
@@ -107,16 +75,11 @@ class ConfigurationAfter:
             logger.setLevel(logging.DEBUG if value else logging.WARNING)
 
 
-# ---------------------------------------------------------------------------
-# Helpers to count _clear_cache calls
-# ---------------------------------------------------------------------------
-
 def count_clear_cache_calls(cls, num_loggers: int, num_copies: int) -> tuple[int, float]:
     """
     Register `num_loggers` loggers, deepcopy a Configuration instance
     `num_copies` times, and return (clear_cache_call_count, elapsed_seconds).
     """
-    # Register many loggers to simulate a heavy environment
     for i in range(num_loggers):
         logging.getLogger(f"dummy.logger.{i}")
 
@@ -139,10 +102,6 @@ def count_clear_cache_calls(cls, num_loggers: int, num_copies: int) -> tuple[int
     logging.Logger.manager.__class__._clear_cache = original_clear_cache
     return call_count, elapsed
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     NUM_LOGGERS = 2_000

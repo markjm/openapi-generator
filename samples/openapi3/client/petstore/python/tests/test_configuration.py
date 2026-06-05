@@ -10,6 +10,7 @@ $ pytest
 """
 from __future__ import absolute_import
 
+import copy
 import unittest
 
 import petstore_api
@@ -96,6 +97,11 @@ class TestConfiguration(unittest.TestCase):
         with self.subTest('not passing debug parameter'):
             c = petstore_api.Configuration()
             self.assertFalse(c.debug)
+
+    def testDeepcopyPreservesDebugValue(self):
+        c1 = petstore_api.Configuration(debug=True)
+        c2 = copy.deepcopy(c1)
+        self.assertTrue(c2.debug)
 
 if __name__ == '__main__':
     unittest.main()
