@@ -11,9 +11,14 @@ Root cause:
   with thousands of loggers (e.g. large ML frameworks) and thousands of
   deepcopy calls this produces tens of millions of logger-cache iterations.
 
-Fix:
-  Guard the setter with an early return when the new value equals the current
-  value, so that redundant setLevel / _clear_cache calls are completely avoided.
+Fix (two complementary layers):
+  1. __deepcopy__: remove the redundant `result.debug = self.debug` call.
+     _Configuration__debug is already present in __dict__ and is correctly
+     deep-copied in the attribute loop above it; the setter call is purely
+     redundant.
+  2. debug setter: guard with an early return when the new value equals the
+     current value, as defense-in-depth for any other caller that sets debug
+     to the same value it already holds.
 
 Usage:
   python scripts/python_debug_setter_repro.py
@@ -45,7 +50,7 @@ class ConfigurationBefore:
             if k not in ("logger",):
                 setattr(result, k, copy.deepcopy(v, memo))
         result.logger = copy.copy(self.logger)
-        result.debug = self.debug   # <-- always fires the setter
+        result.debug = self.debug   # <-- always fires the setter (bug)
         return result
 
     @property
@@ -61,7 +66,7 @@ class ConfigurationBefore:
 
 
 class ConfigurationAfter:
-    """Reproduces the FIXED behaviour."""
+    """Reproduces the FIXED behaviour (both layers applied)."""
 
     def __init__(self):
         self.logger = {
@@ -78,7 +83,8 @@ class ConfigurationAfter:
             if k not in ("logger",):
                 setattr(result, k, copy.deepcopy(v, memo))
         result.logger = copy.copy(self.logger)
-        result.debug = self.debug
+        # FIX 1: __debug is already correctly copied above; do NOT call the
+        # debug setter here — that would redundantly call setLevel() / _clear_cache().
         return result
 
     @property
@@ -87,9 +93,15 @@ class ConfigurationAfter:
 
     @debug.setter
     def debug(self, value):
-        # FIX: no-op when the value hasn't changed
-        if hasattr(self, '_ConfigurationAfter__debug') and self.__debug == value:
-            return
+        # FIX 2: defense-in-depth — no-op when the value hasn't changed.
+        # Uses try/except rather than hasattr(self, '_Configuration__debug')
+        # because name mangling only applies inside a class body, not in a
+        # string literal passed to hasattr.
+        try:
+            if self.__debug == value:
+                return
+        except AttributeError:
+            pass
         self.__debug = value
         for _, logger in self.logger.items():
             logger.setLevel(logging.DEBUG if value else logging.WARNING)

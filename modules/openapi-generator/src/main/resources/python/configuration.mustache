@@ -516,9 +516,14 @@ conf = {{{packageName}}}.Configuration(
                 setattr(result, k, copy.deepcopy(v, memo))
         # shallow copy of loggers
         result.logger = copy.copy(self.logger)
-        # use setters to configure loggers
+        # use setter to (re-)attach file handler, since logger_file_handler is
+        # excluded from the copy loop above and must be re-created
         result.logger_file = self.logger_file
-        result.debug = self.debug
+        # NOTE: result.__debug is already set correctly by the dict copy loop
+        # above (it is stored in __dict__ under its mangled name).  Calling the
+        # debug setter here is intentionally omitted to avoid redundant setLevel()
+        # calls, which each trigger logging.Manager._clear_cache() over every
+        # registered logger in the process.
         return result
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -612,8 +617,11 @@ conf = {{{packageName}}}.Configuration(
         :param value: The debug status, True or False.
         :type: bool
         """
-        if hasattr(self, '_Configuration__debug') and self.__debug == value:
-            return
+        try:
+            if self.__debug == value:
+                return
+        except AttributeError:
+            pass
         self.__debug = value
         if self.__debug:
             # if debug status is True, turn on debug logging
