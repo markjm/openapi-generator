@@ -78,7 +78,8 @@ class TestConfiguration(unittest.TestCase):
         self.assertEqual("http://dev-petstore.swagger.io:8080/v2", self.config.get_host_from_settings(0, {'server': 'dev-petstore', 'port': '8080'}))
 
     def testDeepcopyPreservesDebugValue(self):
-        c1 = petstore_api.Configuration(debug=True)
+        c1 = petstore_api.Configuration()
+        c1.debug = True
         c2 = copy.deepcopy(c1)
         self.assertTrue(c2.debug)
 
